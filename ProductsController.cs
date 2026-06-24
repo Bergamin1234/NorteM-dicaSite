@@ -16,10 +16,10 @@
     /// </summary>
     /// <returns>Uma lista de produtos.</returns>
     [HttpGet]
-    [ProducesResponseType(typeof(IEnumerable<ProductSummaryDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetProducts([FromQuery] string? searchTerm)
+    [ProducesResponseType(typeof(NorteMedicaSite.Application.Common.Models.PaginatedList<ProductSummaryDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetProducts([FromQuery] string? searchTerm, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 8)
     {
-        var query = new GetProductsQuery(searchTerm);
+        var query = new GetProductsQuery(searchTerm, pageNumber, pageSize);
         var result = await _mediator.Send(query);
 
         return Ok(result);

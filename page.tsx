@@ -1,46 +1,66 @@
 import Link from 'next/link';
 
-// Interface para o resumo do produto, alinhada com o ProductSummaryDto do C#
 interface ProductSummary {
   id: string;
   slug: string;
   name:string;
 }
 
-// Props da página, incluindo os parâmetros de busca da URL (ex: ?q=luva)
-interface ProductsPageProps {
-  searchParams: { q?: string };
+interface PaginatedProducts {
+  items: ProductSummary[];
+  pageNumber: number;
+  totalPages: number;
+  totalCount: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
 }
 
-// Função para buscar os produtos na nossa API C#
-async function getProducts(searchTerm?: string): Promise<ProductSummary[]> {
+interface ProductsPageProps {
+  searchParams: { q?: string; page?: string };
+}
+
+async function getProducts(searchTerm?: string, page: number = 1): Promise<PaginatedProducts> {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-  // Constrói a URL, adicionando o `searchTerm` se ele existir
-  const search = searchTerm ? `?searchTerm=${encodeURIComponent(searchTerm)}` : '';
-  const url = `${apiBaseUrl}/api/v1/products${search}`;
+  const params = new URLSearchParams();
+  if (searchTerm) {
+    params.append('searchTerm', searchTerm);
+  }
+  params.append('pageNumber', page.toString());
+  
+  const url = `${apiBaseUrl}/api/v1/products?${params.toString()}`;
 
   try {
-    // Usamos 'no-store' para garantir que a busca seja sempre dinâmica e não use cache
     const res = await fetch(url, { cache: 'no-store' });
 
     if (!res.ok) {
       console.error('Falha ao buscar produtos:', res.statusText);
-      return []; // Retorna uma lista vazia em caso de erro
+      // Retorna um objeto padrão em caso de erro
+      return { items: [], pageNumber: 1, totalPages: 0, totalCount: 0, hasPreviousPage: false, hasNextPage: false };
     }
 
     return res.json();
   } catch (error) {
     console.error("Erro de conexão com a API:", error);
-    return []; // Retorna uma lista vazia se a API estiver offline
+    return { items: [], pageNumber: 1, totalPages: 0, totalCount: 0, hasPreviousPage: false, hasNextPage: false };
   }
 }
 
-// O componente da página
 export default async function ProductsPage({ searchParams }: ProductsPageProps) {
-  // Pega o termo de busca da URL
   const searchTerm = searchParams.q;
-  // Chama a função para buscar os produtos
-  const products = await getProducts(searchTerm);
+  const currentPage = Number(searchParams.page) || 1;
+  const productsData = await getProducts(searchTerm, currentPage);
+
+  const buildPageLink = (page: number) => {
+    const params = new URLSearchParams();
+    if (searchTerm) {
+      params.append('q', searchTerm);
+    }
+    if (page > 1) {
+      params.append('page', page.toString());
+    }
+    const queryString = params.toString();
+    return `/produtos${queryString ? `?${queryString}` : ''}`;
+  };
 
   return (
     <section className="container mx-auto p-6">
@@ -48,12 +68,11 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         Nossos Produtos
       </h1>
 
-      {/* Formulário de Busca */}
       <form method="GET" className="mb-8 max-w-md">
         <div className="flex">
           <input
             type="text"
-            name="q" // O nome 'q' corresponde ao `searchParams.q`
+            name="q"
             defaultValue={searchTerm}
             placeholder="Buscar por nome do produto..."
             className="flex-grow p-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500"
