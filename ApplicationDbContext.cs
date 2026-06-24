@@ -1,10 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Nortemedica.Domain.Aggregates.CustomerAggregate;
 using Nortemedica.Domain.Aggregates.ProductAggregate;
+using Nortemedica.Domain.RepositoryInterfaces;
 
 namespace Nortemedica.Infrastructure.Data;
 
-public class ApplicationDbContext : DbContext
+public class ApplicationDbContext : DbContext, IUnitOfWork
 {
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
 
