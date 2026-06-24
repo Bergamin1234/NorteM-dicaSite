@@ -1,83 +1,84 @@
-import { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import Link from 'next/link';
 
-// Interface para os dados do produto, alinhada com o ProductDetailDto do back-end
-interface ProductDetail {
+// Interface para o resumo do produto, alinhada com o ProductSummaryDto do C#
+interface ProductSummary {
   id: string;
-  sku: string;
   slug: string;
-  name: string;
-  description?: string;
-  price: number;
-  categoryName?: string;
+  name:string;
 }
 
-// Interface para as props da página
-interface ProductPageProps {
-  params: { slug: string };
+// Props da página, incluindo os parâmetros de busca da URL (ex: ?q=luva)
+interface ProductsPageProps {
+  searchParams: { q?: string };
 }
 
-// 1. Função de busca de dados centralizada
-async function getProductBySlug(slug: string): Promise<ProductDetail | null> {
+// Função para buscar os produtos na nossa API C#
+async function getProducts(searchTerm?: string): Promise<ProductSummary[]> {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  // Constrói a URL, adicionando o `searchTerm` se ele existir
+  const search = searchTerm ? `?searchTerm=${encodeURIComponent(searchTerm)}` : '';
+  const url = `${apiBaseUrl}/api/v1/products${search}`;
+
   try {
-    const res = await fetch(`${apiBaseUrl}/api/v1/products/${slug}`, {
-      next: { revalidate: 3600 } // Revalida a cada 1 hora
-    });
+    // Usamos 'no-store' para garantir que a busca seja sempre dinâmica e não use cache
+    const res = await fetch(url, { cache: 'no-store' });
 
     if (!res.ok) {
-      return null;
+      console.error('Falha ao buscar produtos:', res.statusText);
+      return []; // Retorna uma lista vazia em caso de erro
     }
 
     return res.json();
   } catch (error) {
-    console.error("Failed to fetch product:", error);
-    return null;
+    console.error("Erro de conexão com a API:", error);
+    return []; // Retorna uma lista vazia se a API estiver offline
   }
 }
 
-// 2. Geração de metadados usando a função de busca
-export async function generateMetadata({ params }: ProductPageProps): Promise<Metadata> {
-  const product = await getProductBySlug(params.slug);
-
-  if (!product) {
-    return {
-      title: 'Produto não encontrado',
-      description: 'O produto que você está procurando não existe.'
-    };
-  }
-
-  return {
-    title: `${product.name} | Nortemédica Distribuidora`,
-    description: product.description || `Compre ${product.name} na Nortemédica.`,
-    alternates: {
-      canonical: `https://www.nortemedica.com.br/produtos/${product.slug}`,
-    },
-  };
-}
-
-// 3. Componente da página reutilizando a mesma função de busca
-export default async function ProductPage({ params }: ProductPageProps) {
-  const product = await getProductBySlug(params.slug);
-
-  if (!product) {
-    notFound();
-  }
-
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'MedicalProduct',
-    'name': product.name,
-    'description': product.description,
-    'sku': product.sku,
-    'mpn': product.sku,
-  };
+// O componente da página
+export default async function ProductsPage({ searchParams }: ProductsPageProps) {
+  // Pega o termo de busca da URL
+  const searchTerm = searchParams.q;
+  // Chama a função para buscar os produtos
+  const products = await getProducts(searchTerm);
 
   return (
     <section className="container mx-auto p-6">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <h1 className="text-3xl font-bold text-slate-900">{product.name}</h1>
-      <p className="text-muted-foreground">{product.description}</p>
+      <h1 className="text-3xl font-bold text-slate-900 mb-4">
+        Nossos Produtos
+      </h1>
+
+      {/* Formulário de Busca */}
+      <form method="GET" className="mb-8 max-w-md">
+        <div className="flex">
+          <input
+            type="text"
+            name="q" // O nome 'q' corresponde ao `searchParams.q`
+            defaultValue={searchTerm}
+            placeholder="Buscar por nome do produto..."
+            className="flex-grow p-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            type="submit"
+            className="p-2 px-4 bg-blue-600 text-white rounded-r-md hover:bg-blue-700"
+          >
+            Buscar
+          </button>
+        </div>
+      </form>
+
+      {/* Lista de Produtos */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        {products.length > 0 ? (
+          products.map((product) => (
+            <Link href={`/produtos/${product.slug}`} key={product.id} className="border rounded-lg p-4 hover:shadow-lg transition-shadow">
+              <h2 className="text-lg font-semibold text-slate-800">{product.name}</h2>
+            </Link>
+          ))
+        ) : (
+          <p>Nenhum produto encontrado.</p>
+        )}
+      </div>
     </section>
   );
 }
