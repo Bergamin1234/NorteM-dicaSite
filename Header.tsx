@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Search } from 'lucide-react'; // Ícone para o campo de busca
+import { SearchBar } from './SearchBar';
 
 const NavLink = ({ href, children }: { href: string; children: React.ReactNode }) => (
   <Link href={href} className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
@@ -22,14 +22,7 @@ export function Header() {
           <NavLink href="/contato">Contato</NavLink>
         </nav>
         <div className="flex-1 flex justify-end">
-          <div className="relative w-full max-w-xs">
-            <input
-              type="text"
-              placeholder="Buscar produtos..."
-              className="w-full pl-10 pr-4 py-2 border rounded-md text-sm"
-            />
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          </div>
+          <SearchBar />
         </div>
       </div>
     </header>

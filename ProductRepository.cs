@@ -25,9 +25,17 @@ public class ProductRepository : IProductRepository
         return await _context.Products.Include(p => p.Category).FirstOrDefaultAsync(p => p.Slug == slug);
     }
 
-    public async Task<IEnumerable<Product>> GetAllAsync()
+    public async Task<IEnumerable<Product>> GetAllAsync(string? searchTerm = null)
     {
-        return await _context.Products.AsNoTracking().ToListAsync();
+        var query = _context.Products.AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var searchTermLower = searchTerm.ToLower();
+            query = query.Where(p => p.Name.ToLower().Contains(searchTermLower) || p.Sku.ToLower().Contains(searchTermLower));
+        }
+
+        return await query.ToListAsync();
     }
 
     public void Add(Product product)

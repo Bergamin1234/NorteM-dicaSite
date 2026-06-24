@@ -8,6 +8,6 @@ public interface IProductRepository
 {
     Task<Product?> GetBySkuAsync(string sku);
     Task<Product?> GetBySlugAsync(string slug);
-    Task<IEnumerable<Product>> GetAllAsync();
+    Task<IEnumerable<Product>> GetAllAsync(string? searchTerm = null);
     void Add(Product product);
 }
