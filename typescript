@@ -1,0 +1,101 @@
+import { Metadata } from 'next';
+import { notFound } from 'next/navigation';
+
+// Interface para os dados do produto
+interface Product {
+  name: string;
+  description: string;
+  slug: string;
+  anvisaRegistration: string;
+  sku: string;
+  imageUrl?: string;
+}
+
+// Interface para as props da página
+interface ProductPageProps {
+  params: { slug: string };
+}
+
+// 1. Função de busca de dados centralizada
+async function getProductBySlug(slug: string): Promise<Product | null> {
+  try {
+    const res = await fetch(`<https://api.nortemedica.com.br/v1/products/${slug}>`, {
+      // Ativa o cache de dados do Next.js para performance
+      next: { revalidate: 3600 } // Revalida a cada 1 hora
+    });
+
+    if (!res.ok) {
+      return null;
+    }
+
+    return res.json();
+  } catch (error) {
+    console.error("Failed to fetch product:", error);
+    return null;
+  }
+}
+
+// 2. Geração de metadados usando a função de busca
+export async function generateMetadata({ params }: ProductPageProps): Promise<Metadata> {
+  const product = await getProductBySlug(params.slug);
+
+  if (!product) {
+    return {
+      title: 'Produto não encontrado',
+      description: 'O produto que você está procurando não existe.'
+    };
+  }
+
+  return {
+    title: `${product.name} | Nortemédica Distribuidora`,
+    description: `Compre ${product.name} com registro ANVISA ${product.anvisaRegistration}. Atendimento hospitalar, clínicas e órgãos públicos.`,
+    alternates: {
+      canonical: `<https://www.nortemedica.com.br/produtos/${product.slug}>`,
+    },
+    openGraph: {
+      title: product.name,
+      description: product.description,
+      url: `<https://www.nortemedica.com.br/produtos/${product.slug}>`,
+      type: 'website',
+      images: [{ url: product.imageUrl ?? '/assets/default-product.png' }],
+    }
+  };
+}
+
+// 3. Componente da página reutilizando a mesma função de busca
+export default async function ProductPage({ params }: ProductPageProps) {
+  const product = await getProductBySlug(params.slug);
+
+  // Se o produto não for encontrado, renderiza a página 404
+  if (!product) {
+    notFound();
+  }
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'MedicalWebPage',
+    'name': product.name,
+    'description': product.description,
+    'mainEntity': {
+      '@type': 'MedicalProduct',
+      'name': product.name,
+      'mpn': product.sku, // Manufacturer Part Number (SKU é uma boa correspondência)
+      'category': 'Hospital Supplies',
+      'legalStatus': 'ANVISA Registered: ' + product.anvisaRegistration
+    }
+  };
+
+  return (
+    <section className="container mx-auto p-6">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Conteúdo da página aqui... */}
+        <h1 className="text-3xl font-bold text-slate-900">{product.name}</h1>
+        <p className="text-muted-foreground">{product.description}</p>
+      </div>
+    </section>
+  );
+}

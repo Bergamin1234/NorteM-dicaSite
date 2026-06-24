@@ -1,0 +1,161 @@
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+using System;
+using System.Text;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using Nortemedica.Application.Features.Alligator.Interfaces;
+
+namespace Nortemedica.Infrastructure.Integration.Alligator;
+
+// Classe para representar as configurações do RabbitMQ injetadas
+public class RabbitMQOptions
+{
+    public string HostName { get; set; } = "localhost";
+    public string QueueName { get; set; } = "alligator-sync-queue";
+    public string DeadLetterQueueName { get; set; } = "alligator-sync-dlq";
+}
+
+public class AlligatorBackgroundJob : BackgroundService
+{
+    private readonly ILogger<AlligatorBackgroundJob> _logger;
+    private readonly IServiceProvider _serviceProvider;
+    private readonly RabbitMQOptions _rabbitMQOptions;
+    private IConnection? _connection;
+    private IChannel? _channel;
+
+    public AlligatorBackgroundJob(
+        ILogger<AlligatorBackgroundJob> logger,
+        IServiceProvider serviceProvider,
+        IOptions<RabbitMQOptions> rabbitMQOptions)
+    {
+        _logger = logger;
+        _serviceProvider = serviceProvider;
+        _rabbitMQOptions = rabbitMQOptions.Value;
+    }
+
+    public override async Task StartAsync(CancellationToken cancellationToken)
+    {
+        await InitializeRabbitMQAsync(cancellationToken);
+        await base.StartAsync(cancellationToken);
+    }
+
+    private async Task InitializeRabbitMQAsync(CancellationToken cancellationToken)
+    {
+        var factory = new ConnectionFactory { HostName = _rabbitMQOptions.HostName, DispatchConsumersAsync = true };
+        
+        // Lógica de retry para resiliência na conexão
+        // Em um cenário de produção, considere usar uma biblioteca como Polly
+        for (int i = 0; i < 5; i++)
+        {
+            try
+            {
+                _connection = await factory.CreateConnectionAsync(cancellationToken);
+                _channel = await _connection.CreateChannelAsync(cancellationToken);
+                break; // Conexão bem-sucedida
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Falha ao conectar ao RabbitMQ. Tentando novamente em 5 segundos...");
+                await Task.Delay(5000, cancellationToken);
+            }
+        }
+
+        if (_channel == null)
+        {
+            _logger.LogError("Não foi possível conectar ao RabbitMQ após múltiplas tentativas.");
+            // Lançar uma exceção aqui pode parar a inicialização do aplicativo, o que pode ser o desejado.
+            throw new InvalidOperationException("Não foi possível conectar ao message broker.");
+        }
+
+        // Declaração da Dead Letter Queue
+        await _channel.QueueDeclareAsync(queue: _rabbitMQOptions.DeadLetterQueueName, durable: true, exclusive: false, autoDelete: false);
+
+        // Declaração da fila principal com a DLQ configurada
+        var args = new Dictionary<string, object>
+        {
+            { "x-dead-letter-exchange", "" },
+            { "x-dead-letter-routing-key", _rabbitMQOptions.DeadLetterQueueName }
+        };
+        await _channel.QueueDeclareAsync(queue: _rabbitMQOptions.QueueName, durable: true, exclusive: false, autoDelete: false, arguments: args);
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        if (_channel == null)
+        {
+            _logger.LogError("O canal do RabbitMQ não foi inicializado. O serviço em background não pode iniciar.");
+            return;
+        }
+
+        var consumer = new AsyncEventingBasicConsumer(_channel);
+        consumer.Received += OnMessageReceived;
+
+        await _channel.BasicConsumeAsync(queue: _rabbitMQOptions.QueueName, autoAck: false, consumer: consumer, cancellationToken: stoppingToken);
+
+        // Mantém o serviço rodando
+        await Task.Delay(Timeout.Infinite, stoppingToken);
+    }
+
+    private async Task OnMessageReceived(object sender, BasicDeliverEventArgs ea)
+    {
+        var body = ea.Body.ToArray();
+        var message = Encoding.UTF8.GetString(body);
+        _logger.LogInformation("Mensagem recebida para processamento ERP Alligator: {Message}", message);
+
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var alligatorService = scope.ServiceProvider.GetRequiredService<IAlligatorService>();
+
+            // Exemplo de como lidar com múltiplos tipos de eventos no futuro
+            // var baseEvent = JsonSerializer.Deserialize<BaseEvent>(message);
+            // switch(baseEvent.EventType) { ... }
+
+            var syncEvent = JsonSerializer.Deserialize<InventorySyncEvent>(message);
+            if (syncEvent?.Sku != null)
+            {
+                bool success = await alligatorService.SynchronizeInventoryAsync(syncEvent.Sku, CancellationToken.None); // Use um CancellationToken apropriado
+                if (success)
+                {
+                    await _channel!.BasicAckAsync(ea.DeliveryTag, multiple: false);
+                    return;
+                }
+            }
+            
+            // Se a lógica de negócio falhar ou a mensagem for inválida, rejeita e envia para a DLQ
+            _logger.LogWarning("Falha na lógica de negócio ou mensagem inválida. Enviando para DLQ. Mensagem: {Message}", message);
+            await _channel!.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: false);
+        }
+        catch (JsonException jsonEx)
+        {
+            _logger.LogError(jsonEx, "Erro de deserialização da mensagem. Enviando para DLQ. Mensagem: {Message}", message);
+            await _channel!.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro crítico ao processar evento de sincronização do Alligator. A mensagem será reenfileirada para nova tentativa.");
+            // Para erros transitórios (ex: falha de rede com o DB), reenfileirar pode ser uma opção.
+            // Cuidado para não criar um loop de envenenamento.
+            await _channel!.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: true); 
+        }
+    }
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        if (_channel != null) await _channel.CloseAsync();
+        if (_connection != null) await _connection.CloseAsync();
+        await base.StopAsync(cancellationToken);
+    }
+}
+
+// Definição do evento de sincronização
+public class InventorySyncEvent
+{
+    public string Sku { get; set; } = string.Empty;
+}
