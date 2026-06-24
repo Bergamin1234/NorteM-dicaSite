@@ -18,6 +18,11 @@ public class ProductRepository : IProductRepository
         return await _context.Products.FirstOrDefaultAsync(p => p.Sku == sku);
     }
 
+    public async Task<Product?> GetBySlugAsync(string slug)
+    {
+        return await _context.Products.Include(p => p.Category).FirstOrDefaultAsync(p => p.Slug == slug);
+    }
+
     public void Add(Product product)
     {
         _context.Products.Add(product);
