@@ -1,18 +1,15 @@
-namespace Nortemedica.Domain.Aggregates.ProductAggregate;
+namespace NorteMedicaSite.Domain.Entities;
 
 public class Product
 {
-    public Guid Id { get; private set; }
+    public Guid Id { get; set; }
     public string Sku { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string Slug { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public string Ean { get; set; } = string.Empty;
-    public decimal Price { get; set; }
+    public string? ImageUrl { get; set; }
 
-    public Guid CategoryId { get; set; }
-    public Category? Category { get; set; }
-
-    // Outras propriedades como Ncm, AnvisaRegistration, etc.
-    // Construtor, métodos de domínio e validações...
+    public Guid BrandId { get; set; }
+    public Brand Brand { get; set; } = null!;
+    // Futuramente, adicionaremos a Categoria aqui também.
 }
