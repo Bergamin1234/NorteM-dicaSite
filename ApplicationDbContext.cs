@@ -21,6 +21,7 @@ public class ApplicationDbContext : DbContext, IUnitOfWork
         {
             b.HasKey(p => p.Id);
             b.HasIndex(p => p.Sku).IsUnique();
+            b.HasIndex(p => p.Slug).IsUnique(); // Adicionar índice para o Slug
             b.Property(p => p.Name).IsRequired().HasMaxLength(255);
             b.Property(p => p.Price).HasColumnType("decimal(18,4)");
         });

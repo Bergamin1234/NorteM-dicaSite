@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Nortemedica.Application.Features.Products.Queries.GetProductBySlug;
+using Nortemedica.Application.Features.Products.Queries.GetProducts;
 using Nortemedica.Application.Features.Products.Commands.SynchronizeProductBySku;
 using System.Threading.Tasks;
 
@@ -48,5 +49,19 @@ public class ProductsController : ControllerBase
         var result = await _mediator.Send(query);
 
         return result != null ? Ok(result) : NotFound();
+    }
+
+    /// <summary>
+    /// Busca uma lista de todos os produtos.
+    /// </summary>
+    /// <returns>Uma lista de produtos.</returns>
+    [HttpGet]
+    [ProducesResponseType(typeof(IEnumerable<ProductSummaryDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetProducts()
+    {
+        var query = new GetProductsQuery();
+        var result = await _mediator.Send(query);
+
+        return Ok(result);
     }
 }
