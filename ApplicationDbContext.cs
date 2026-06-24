@@ -1,10 +1,11 @@
 using Microsoft.EntityFrameworkCore;
+using NorteMedicaSite.Application.Common.Interfaces;
 using NorteMedicaSite.Domain.Entities;
 using System.Reflection;
 
 namespace NorteMedicaSite.Infrastructure.Persistence;
 
-public class ApplicationDbContext : DbContext
+public class ApplicationDbContext : DbContext, IApplicationDbContext
 {
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
 
