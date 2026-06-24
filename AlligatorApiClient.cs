@@ -1,23 +1,3 @@
-using System.Net.Http;
-using System.Net.Http.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
-using Nortemedica.Application.Features.Alligator.Dtos;
-using Nortemedica.Application.Features.Alligator.Interfaces;
-
-namespace Nortemedica.Infrastructure.Integration.Alligator;
-
-/// <summary>
-/// Cliente HTTP para se comunicar com a API do ERP Alligator.
-/// Esta classe encapsula a lógica de requisições e respostas.
-/// </summary>
-public class AlligatorApiClient : IAlligatorApiClient
-{
-    private readonly HttpClient _httpClient;
-    private readonly ILogger<AlligatorApiClient> _logger;
-
-    // HttpClient é injetado via IHttpClientFactory para gerenciamento otimizado de sockets.
     public AlligatorApiClient(HttpClient httpClient, ILogger<AlligatorApiClient> logger)
     {
         _httpClient = httpClient;
@@ -32,10 +12,11 @@ public class AlligatorApiClient : IAlligatorApiClient
             // Exemplo de chamada à API do Alligator para buscar um produto.
             return await _httpClient.GetFromJsonAsync<AlligatorProductSyncDto>($"/api/products/{sku}", cancellationToken);
         }
-        catch (HttpRequestException ex)
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            _logger.LogError(ex, "Erro ao buscar produto com SKU {Sku} na API do Alligator.", sku);
+            _logger.LogWarning("Produto com SKU {Sku} não encontrado na API do Alligator.", sku);
             return null;
         }
+        // Para outros erros de HTTP, a política do Polly (configurada no Program.cs) fará o retry.
+        // Se todas as tentativas falharem, a exceção será lançada e deverá ser tratada pela camada de serviço que chamou este método.
     }
-}

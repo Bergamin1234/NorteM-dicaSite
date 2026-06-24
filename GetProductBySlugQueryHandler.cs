@@ -1,35 +1,33 @@
 using MediatR;
-using Nortemedica.Domain.RepositoryInterfaces;
 
-namespace Nortemedica.Application.Features.Products.Queries.GetProductBySlug;
+namespace NorteMedicaSite.Application.Products.Queries;
 
 public class GetProductBySlugQueryHandler : IRequestHandler<GetProductBySlugQuery, ProductDetailDto?>
 {
-    private readonly IProductRepository _productRepository;
+    // Em uma aplicação real, você injetaria seu DbContext ou repositório aqui.
+    // Ex: private readonly IApplicationDbContext _context;
+    // public GetProductBySlugQueryHandler(IApplicationDbContext context) => _context = context;
 
-    public GetProductBySlugQueryHandler(IProductRepository productRepository)
+    public Task<ProductDetailDto?> Handle(GetProductBySlugQuery request, CancellationToken cancellationToken)
     {
-        _productRepository = productRepository;
-    }
+        // --- LÓGICA SIMULADA (MOCK) ---
+        // Aqui estamos criando uma lista de produtos na memória para simular um banco de dados.
+        var mockProducts = new List<ProductDetailDto>
+        {
+            new() { Id = "prod_1", Sku = "NM-001", Slug = "luva-cirurgica-pro", Name = "Luva Cirúrgica Pro", Description = "Luva de alta qualidade para procedimentos." },
+            new() { Id = "prod_2", Sku = "NM-002", Slug = "mascara-n95-plus", Name = "Máscara N95 Plus", Description = "Máscara com filtragem superior." },
+            new() { Id = "prod_3", Sku = "NM-003", Slug = "seringa-descartavel-10ml", Name = "Seringa Descartável 10ml", Description = "Pacote com 100 unidades." }
+        };
 
-    public async Task<ProductDetailDto?> Handle(GetProductBySlugQuery request, CancellationToken cancellationToken)
-    {
-        var product = await _productRepository.GetBySlugAsync(request.Slug);
+        // Procuramos o produto na nossa lista simulada usando o slug da requisição.
+        var product = mockProducts.FirstOrDefault(p => p.Slug == request.Slug);
 
+        // Se o produto não for encontrado, retornamos null, e o controller retornará um 404 Not Found.
         if (product == null)
         {
-            return null;
+            return Task.FromResult<ProductDetailDto?>(null);
         }
 
-        return new ProductDetailDto
-        {
-            Id = product.Id,
-            Sku = product.Sku,
-            Slug = product.Slug,
-            Name = product.Name,
-            Description = product.Description,
-            Price = product.Price,
-            CategoryName = product.Category?.Name
-        };
+        return Task.FromResult<ProductDetailDto?>(product);
     }
 }

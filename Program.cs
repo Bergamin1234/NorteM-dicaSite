@@ -1,14 +1,5 @@
-using Microsoft.EntityFrameworkCore;
-using Nortemedica.Application.Features.Alligator.Interfaces;
-using Nortemedica.Application.Features.Products.Commands.SynchronizeProductBySku;
-using Nortemedica.Domain.RepositoryInterfaces;
-using Nortemedica.Infrastructure.Data;
-using Nortemedica.Infrastructure.Data.Repositories;
-using Nortemedica.Infrastructure.Integration.Alligator;
-
-var builder = WebApplication.CreateBuilder(args);
-
 // 1. Adicionar serviços ao contêiner de DI.
+using Polly;
 
 // Configuração do MediatR para encontrar automaticamente todos os handlers no assembly da Aplicação.
 builder.Services.AddMediatR(cfg => 
@@ -31,34 +22,21 @@ builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 builder.Services.AddScoped<IAlligatorSynchronizationService, AlligatorSynchronizationService>();
 
 // Configuração do HttpClient para o AlligatorApiClient.
-builder.Services.AddHttpClient<IAlligatorApiClient, AlligatorApiClient>(client =>
-{
-    // A URL base da API do Alligator viria da configuração (appsettings.json).
-    client.BaseAddress = new Uri(builder.Configuration.GetValue<string>("AlligatorApi:BaseUrl"));
-    // Outras configurações como headers de autenticação podem ser adicionadas aqui.
-});
-
-
-builder.Services.AddControllers();
-
-// Adicionar suporte ao Swagger/OpenAPI para documentação da API.
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-
-var app = builder.Build();
-
-// 2. Configurar o pipeline de requisições HTTP.
-
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
-app.UseHttpsRedirection();
-
-app.UseAuthorization();
-
-app.MapControllers();
-
-app.Run();
+builder.Services
+    .AddHttpClient<IAlligatorApiClient, AlligatorApiClient>(client =>
+    {
+        // A URL base da API do Alligator viria da configuração (appsettings.json).
+        client.BaseAddress = new Uri(builder.Configuration.GetValue<string>("AlligatorApi:BaseUrl"));
+        // Outras configurações como headers de autenticação podem ser adicionadas aqui.
+    })
+    // Adiciona uma política de retry para lidar com falhas transitórias de rede.
+    .AddTransientHttpErrorPolicy(policyBuilder => 
+        policyBuilder.WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)), 
+            onRetry: (outcome, timespan, retryAttempt, context) =>
+            {
+                // Log da tentativa de retry
+            }))
+    // Adiciona uma política de Circuit Breaker para evitar sobrecarregar uma API que está falhando.
+    .AddTransientHttpErrorPolicy(policyBuilder => 
+        policyBuilder.CircuitBreakerAsync(5, TimeSpan.FromSeconds(30))
+    );

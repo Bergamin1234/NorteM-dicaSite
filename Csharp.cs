@@ -1,46 +1,8 @@
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using RabbitMQ.Client;
-using RabbitMQ.Client.Events;
-using System;
-using System.Text;
-using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using Nortemedica.Application.Features.Alligator.Interfaces;
-
-// Adicionando a nova interface para o API Client
-namespace Nortemedica.Application.Features.Alligator.Interfaces
-{
-    public interface IAlligatorApiClient
-    {
-    }
-}
-namespace Nortemedica.Infrastructure.Integration.Alligator;
-
-// Classe para representar as configurações do RabbitMQ injetadas
-public class RabbitMQOptions
-{
-    public string HostName { get; set; } = "localhost";
-    public string QueueName { get; set; } = "alligator-sync-queue";
-    public string DeadLetterQueueName { get; set; } = "alligator-sync-dlq";
-}
-
-public class AlligatorBackgroundJob : BackgroundService
-{
-    private readonly ILogger<AlligatorBackgroundJob> _logger;
-    private readonly IServiceProvider _serviceProvider;
-    private readonly RabbitMQOptions _rabbitMQOptions;
-    private IConnection? _connection;
-    private IChannel? _channel;
-
-    public AlligatorBackgroundJob(
-        ILogger<AlligatorBackgroundJob> logger,
         IServiceProvider serviceProvider,
         IOptions<RabbitMQOptions> rabbitMQOptions)
     {
+        // O nome do arquivo "Csharp.cs" é muito genérico. Considere renomeá-lo para algo descritivo,
+        // como "AlligatorSyncConsumerService.cs", para refletir sua responsabilidade.
         _logger = logger;
         _serviceProvider = serviceProvider;
         _rabbitMQOptions = rabbitMQOptions.Value;
@@ -68,56 +30,7 @@ public class AlligatorBackgroundJob : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Falha ao conectar ao RabbitMQ. Tentando novamente em 5 segundos...");
-                await Task.Delay(5000, cancellationToken);
-            }
-        }
-
-        if (_channel == null)
-        {
-            _logger.LogError("Não foi possível conectar ao RabbitMQ após múltiplas tentativas.");
-            // Lançar uma exceção aqui pode parar a inicialização do aplicativo, o que pode ser o desejado.
-            throw new InvalidOperationException("Não foi possível conectar ao message broker.");
-        }
-
-        // Declaração da Dead Letter Queue
-        await _channel.QueueDeclareAsync(queue: _rabbitMQOptions.DeadLetterQueueName, durable: true, exclusive: false, autoDelete: false);
-
-        // Declaração da fila principal com a DLQ configurada
-        var args = new Dictionary<string, object>
-        {
-            { "x-dead-letter-exchange", "" },
-            { "x-dead-letter-routing-key", _rabbitMQOptions.DeadLetterQueueName }
-        };
-        await _channel.QueueDeclareAsync(queue: _rabbitMQOptions.QueueName, durable: true, exclusive: false, autoDelete: false, arguments: args);
-    }
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        if (_channel == null)
-        {
-            _logger.LogError("O canal do RabbitMQ não foi inicializado. O serviço em background não pode iniciar.");
-            return;
-        }
-
-        var consumer = new AsyncEventingBasicConsumer(_channel);
-        consumer.Received += OnMessageReceived;
-
-        await _channel.BasicConsumeAsync(queue: _rabbitMQOptions.QueueName, autoAck: false, consumer: consumer, cancellationToken: stoppingToken);
-
-        // Mantém o serviço rodando
-        await Task.Delay(Timeout.Infinite, stoppingToken);
-    }
-
-    private async Task OnMessageReceived(object sender, BasicDeliverEventArgs ea)
-    {
-        var body = ea.Body.ToArray();
-        var message = Encoding.UTF8.GetString(body);
-        _logger.LogInformation("Mensagem recebida para processamento ERP Alligator: {Message}", message);
-
-        try
-        {
-            using var scope = _serviceProvider.CreateScope();
+...
             var alligatorService = scope.ServiceProvider.GetRequiredService<IAlligatorService>();
 
             // Exemplo de como lidar com múltiplos tipos de eventos no futuro
@@ -127,7 +40,9 @@ public class AlligatorBackgroundJob : BackgroundService
             var syncEvent = JsonSerializer.Deserialize<InventorySyncEvent>(message);
             if (syncEvent?.Sku != null)
             {
-                bool success = await alligatorService.SynchronizeInventoryAsync(syncEvent.Sku, CancellationToken.None); // Use um CancellationToken apropriado
+                // Utilizar um CancellationToken vinculado ao token de parada do serviço.
+                // Isso garante que operações longas possam ser canceladas se o serviço for interrompido.
+                bool success = await alligatorService.SynchronizeInventoryAsync(syncEvent.Sku, _stoppingCts.Token);
                 if (success)
                 {
                     await _channel!.BasicAckAsync(ea.DeliveryTag, multiple: false);
@@ -148,7 +63,7 @@ public class AlligatorBackgroundJob : BackgroundService
         {
             _logger.LogError(ex, "Erro crítico ao processar evento de sincronização do Alligator. A mensagem será reenfileirada para nova tentativa.");
             // Para erros transitórios (ex: falha de rede com o DB), reenfileirar pode ser uma opção.
-            // Cuidado para não criar um loop de envenenamento.
+            // Cuidado para não criar um loop de envenenamento (poison message).
             await _channel!.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: false); // Mudei para false para evitar poison messages em caso de erro de código.
         }
     }
@@ -157,6 +72,7 @@ public class AlligatorBackgroundJob : BackgroundService
     {
         if (_channel != null) await _channel.CloseAsync();
         if (_connection != null) await _connection.CloseAsync();
+        _stoppingCts.Cancel(); // Sinaliza o cancelamento para as operações em andamento
         await base.StopAsync(cancellationToken);
     }
 }
