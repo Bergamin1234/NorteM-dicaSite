@@ -1,10 +1,11 @@
-namespace Nortemedica.Application.Features.Products.Queries.GetProducts;
+namespace NorteMedicaSite.Application.Products.Queries;
 
+/// <summary>
+/// DTO para o resumo de um produto, usado em listagens.
+/// </summary>
 public class ProductSummaryDto
 {
-    public Guid Id { get; set; }
-    public string Name { get; set; } = string.Empty;
+    public string Id { get; set; } = string.Empty;
     public string Slug { get; set; } = string.Empty;
-    public decimal Price { get; set; }
-    // public string? ImageUrl { get; set; } // A ser adicionado futuramente
+    public string Name { get; set; } = string.Empty;
 }

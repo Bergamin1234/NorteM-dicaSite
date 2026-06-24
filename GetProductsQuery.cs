@@ -1,6 +1,5 @@
 using MediatR;
-using System.Collections.Generic;
 
-namespace Nortemedica.Application.Features.Products.Queries.GetProducts;
+namespace NorteMedicaSite.Application.Products.Queries;
 
 public record GetProductsQuery(string? SearchTerm) : IRequest<IEnumerable<ProductSummaryDto>>;
