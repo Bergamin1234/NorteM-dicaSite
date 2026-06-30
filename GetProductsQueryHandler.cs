@@ -25,7 +25,10 @@ public class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, Paginat
         // Se um termo de busca foi fornecido, filtramos a lista.
         if (!string.IsNullOrWhiteSpace(request.SearchTerm))
         {
-            queryableProducts = queryableProducts.Where(p => p.Name.Contains(request.SearchTerm));
+            // Usando Full-Text Search para uma busca textual eficiente e performática.
+            // Isso é muito mais rápido do que p.Name.Contains() em grandes volumes de dados.
+            // Requer que o Full-Text Search esteja configurado no SQL Server para a coluna 'Name'.
+            queryableProducts = queryableProducts.Where(p => EF.Functions.FreeText(p.Name, request.SearchTerm));
         }
 
         // Executa a contagem total de itens (respeitando o filtro)

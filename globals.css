@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 
+  Você pode adicionar estilos globais ou sobrescrever estilos base aqui.
+  Por exemplo:
+*/
+
+body {
+  /* Adiciona um antialiasing mais suave para as fontes na maioria dos navegadores */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

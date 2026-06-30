@@ -7,8 +7,16 @@ import { Footer } from "@/components/common/Footer";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Nortemédica Distribuidora",
-  description: "Soluções Completas em Saúde para o Setor Público e Privado",
+  title: {
+    default: "Nortemédica Distribuidora",
+    template: "%s | Nortemédica",
+  },
+  description: "Soluções Completas em Saúde para o Setor Público e Privado.",
+  openGraph: {
+    title: "Nortemédica Distribuidora",
+    description: "Soluções Completas em Saúde para o Setor Público e Privado.",
+    siteName: "Nortemédica",
+  },
 };
 
 export default function RootLayout({
